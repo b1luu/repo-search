@@ -1,0 +1,17 @@
+# build
+build/
+*.o
+*.out
+repo_search
+
+# macOS
+.DS_Store
+
+# vscode
+.vscode/
+
+# logs
+*.log
+
+fastapi/
+datasets/
