@@ -1,5 +1,7 @@
+#include "graph_builder.h"
+#include "indexer.h"
 #include "parser.h"
-#include "tokenizer.h"
+#include "search_engine.h"
 
 #include <chrono>
 #include <cstdio>
@@ -7,93 +9,66 @@
 #include <string>
 
 // ---------------------------------------------------------------------------
-// Phase 1 driver — parse a directory and print a summary.
-// Subsequent phases will add: indexer, graph_builder, search_engine, reranker.
+// Phase 2 driver
+// Pipeline: parse → index → graph → search
 // ---------------------------------------------------------------------------
 
+static double elapsed_ms(std::chrono::steady_clock::time_point a,
+                         std::chrono::steady_clock::time_point b) {
+    return std::chrono::duration<double, std::milli>(b - a).count();
+}
+
 int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        std::fprintf(stderr, "Usage: %s <directory> [query]\n", argv[0]);
+    if (argc < 3) {
+        std::fprintf(stderr, "Usage: %s <directory> <query>\n", argv[0]);
         return 1;
     }
 
     const std::filesystem::path root(argv[1]);
     if (!std::filesystem::exists(root)) {
-        std::fprintf(stderr, "Error: directory '%s' does not exist.\n", argv[1]);
+        std::fprintf(stderr, "Error: '%s' does not exist.\n", argv[1]);
         return 1;
     }
 
-    // -----------------------------------------------------------------------
-    // Parse
-    // -----------------------------------------------------------------------
-    const auto t0 = std::chrono::steady_clock::now();
+    auto t0 = std::chrono::steady_clock::now();
 
+    // ---- Parse --------------------------------------------------------------
     auto files = rs::parse_directory(root);
+    auto t1 = std::chrono::steady_clock::now();
+    std::printf("Parse:  %zu files  (%.1f ms)\n", files.size(), elapsed_ms(t0, t1));
 
-    const auto t1 = std::chrono::steady_clock::now();
-    const double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    // ---- Index --------------------------------------------------------------
+    auto idx = rs::build_index(std::move(files));
+    auto t2 = std::chrono::steady_clock::now();
+    std::printf("Index:  %u docs, %u terms  (%.1f ms)\n", idx.num_docs, idx.vocab.size(),
+                elapsed_ms(t1, t2));
 
-    // -----------------------------------------------------------------------
-    // Summary
-    // -----------------------------------------------------------------------
-    std::size_t total_tokens  = 0;
-    std::size_t total_imports = 0;
-    for (auto const& pf : files) {
-        total_tokens  += pf.token_views.size();
-        total_imports += pf.imports.size();
-    }
+    // ---- Graph --------------------------------------------------------------
+    auto graph = rs::build_graph(idx);
+    auto t3 = std::chrono::steady_clock::now();
 
-    std::printf("Parsed %zu .py files in %.2f ms\n", files.size(), ms);
-    std::printf("Total tokens:  %zu\n", total_tokens);
-    std::printf("Total imports: %zu\n", total_imports);
+    std::size_t total_edges = 0;
+    for (auto const& nbrs : graph.adj)
+        total_edges += nbrs.size();
+    std::printf("Graph:  %zu intra-corpus edges  (%.1f ms)\n", total_edges, elapsed_ms(t2, t3));
 
-    // -----------------------------------------------------------------------
-    // Sample: print first 10 files with their imports
-    // -----------------------------------------------------------------------
-    std::printf("\n--- Sample (first 10 files) ---\n");
-    const std::size_t limit = std::min<std::size_t>(10, files.size());
-    for (std::size_t i = 0; i < limit; ++i) {
-        auto const& pf = files[i];
-        std::printf("\n[%zu] %s\n", i, pf.path.c_str());
-        std::printf("     tokens: %zu\n", pf.token_views.size());
-        if (!pf.imports.empty()) {
-            std::printf("     imports:");
-            for (auto const& imp : pf.imports) std::printf(" %s", imp.c_str());
-            std::printf("\n");
+    // ---- Search -------------------------------------------------------------
+    const std::string query(argv[2]);
+    auto t4 = std::chrono::steady_clock::now();
+    auto results = rs::search(query, idx, graph);
+    auto t5 = std::chrono::steady_clock::now();
+
+    const double search_us = std::chrono::duration<double, std::micro>(t5 - t4).count();
+
+    std::printf("\nSearch: \"%s\"  (%.1f µs)\n\n", query.c_str(), search_us);
+    std::printf("Top results:\n");
+
+    if (results.empty()) {
+        std::printf("  (no results)\n");
+    } else {
+        for (auto const& r : results) {
+            std::printf("  [%.4f] %.*s\n", r.score, static_cast<int>(r.path.size()), r.path.data());
         }
-    }
-
-    // -----------------------------------------------------------------------
-    // Optional: naive token-presence search (before indexer exists)
-    // -----------------------------------------------------------------------
-    if (argc >= 3) {
-        const std::string query_raw(argv[2]);
-        auto query_tokens = rs::tokenize_owned(query_raw);
-
-        std::printf("\n--- Search: \"%s\" ---\n", query_raw.c_str());
-
-        struct Hit { double score; std::string_view path; };
-        std::vector<Hit> hits;
-
-        for (auto const& pf : files) {
-            double score = 0.0;
-            for (auto const& qt : query_tokens) {
-                for (auto const& tok : pf.token_views) {
-                    if (tok == qt) score += 1.0;
-                }
-            }
-            if (score > 0.0) hits.push_back({score, pf.path});
-        }
-
-        std::sort(hits.begin(), hits.end(),
-                  [](auto const& a, auto const& b) { return a.score > b.score; });
-
-        const std::size_t top_k = std::min<std::size_t>(10, hits.size());
-        for (std::size_t i = 0; i < top_k; ++i) {
-            std::printf("[%.0f] %s\n", hits[i].score, std::string(hits[i].path).c_str());
-        }
-
-        if (hits.empty()) std::printf("No results.\n");
     }
 
     return 0;

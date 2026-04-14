@@ -9,7 +9,8 @@ namespace rs {
 std::vector<std::string_view> tokenize(std::string& text) {
     // Lowercase in a single pass (avoid locale overhead — ASCII only).
     for (char& c : text) {
-        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + 32);
+        if (c >= 'A' && c <= 'Z')
+            c = static_cast<char>(c + 32);
     }
 
     std::vector<std::string_view> tokens;
@@ -21,13 +22,16 @@ std::vector<std::string_view> tokenize(std::string& text) {
 
     while (i < n) {
         // Skip non-alphanumeric
-        while (i < n && !std::isalnum(static_cast<unsigned char>(data[i]))) ++i;
-        if (i >= n) break;
+        while (i < n && !std::isalnum(static_cast<unsigned char>(data[i])))
+            ++i;
+        if (i >= n)
+            break;
 
         const std::size_t start = i;
 
         // Consume alphanumeric run
-        while (i < n && std::isalnum(static_cast<unsigned char>(data[i]))) ++i;
+        while (i < n && std::isalnum(static_cast<unsigned char>(data[i])))
+            ++i;
 
         const std::size_t len = i - start;
         if (len >= 2) { // skip single-char tokens
@@ -44,7 +48,8 @@ std::vector<std::string> tokenize_owned(std::string_view text) {
     // Copy + lowercase
     std::string buf(text);
     for (char& c : buf) {
-        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + 32);
+        if (c >= 'A' && c <= 'Z')
+            c = static_cast<char>(c + 32);
     }
 
     std::vector<std::string> tokens;
@@ -53,11 +58,14 @@ std::vector<std::string> tokenize_owned(std::string_view text) {
     std::size_t i = 0;
 
     while (i < n) {
-        while (i < n && !std::isalnum(static_cast<unsigned char>(data[i]))) ++i;
-        if (i >= n) break;
+        while (i < n && !std::isalnum(static_cast<unsigned char>(data[i])))
+            ++i;
+        if (i >= n)
+            break;
 
         const std::size_t start = i;
-        while (i < n && std::isalnum(static_cast<unsigned char>(data[i]))) ++i;
+        while (i < n && std::isalnum(static_cast<unsigned char>(data[i])))
+            ++i;
 
         const std::size_t len = i - start;
         if (len >= 2) {

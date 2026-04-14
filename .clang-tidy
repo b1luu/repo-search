@@ -1,0 +1,43 @@
+---
+# clang-tidy configuration for a C++20 systems project.
+# Philosophy: catch real bugs and unidiomatic modern C++; suppress style noise.
+# Run: scripts/lint.sh (requires compile_commands.json from build_debug.sh).
+
+Checks: >-
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  clang-analyzer-core.*,
+  clang-analyzer-cplusplus.*,
+  clang-analyzer-deadcode.*,
+  modernize-loop-convert,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-use-emplace,
+  modernize-use-default-member-init,
+  modernize-avoid-c-arrays,
+  modernize-avoid-bind,
+  performance-unnecessary-copy-initialization,
+  performance-unnecessary-value-param,
+  performance-move-const-arg,
+  performance-no-automatic-move,
+  readability-qualified-auto,
+  readability-simplify-boolean-expr,
+  readability-misleading-indentation,
+  readability-const-return-type,
+  readability-implicit-bool-conversion,
+  readability-inconsistent-declaration-parameter-name,
+  readability-redundant-member-init,
+  -readability-magic-numbers,
+  -readability-named-parameter,
+  -readability-identifier-length,
+
+# Do not escalate to errors — this is advisory during early development.
+# Flip to '*' once the codebase is clean and you want a hard gate.
+WarningsAsErrors: ''
+
+# Only report diagnostics for our own headers, not system/third-party headers.
+HeaderFilterRegex: 'src/.*'
+
+# Use the project's .clang-format style for any suggested replacements.
+FormatStyle: file

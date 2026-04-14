@@ -1,0 +1,67 @@
+---
+# Conservative LLVM-based style for a C++20 systems project.
+# Target: clang-format 15+.  Run scripts/format.sh to apply.
+
+BasedOnStyle: LLVM
+
+# Indentation
+IndentWidth:            4
+TabWidth:               4
+UseTab:                 Never
+ContinuationIndentWidth: 4
+IndentCaseLabels:       true
+
+# Line length — long enough for modern systems code, short enough to read.
+ColumnLimit: 100
+
+# Braces — all attached (K&R style), no "Egyptian" brace confusion.
+BreakBeforeBraces: Attach
+
+# Short constructs
+AllowShortFunctionsOnASingleLine:  InlineOnly
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine:      false
+AllowShortLambdasOnASingleLine:    All
+AllowShortBlocksOnASingleLine:     Empty
+
+# Templates and concepts
+AlwaysBreakTemplateDeclarations: Yes
+RequiresClausePosition:          OwnLine
+
+# Parameters / arguments — pack by default; break when they don't fit.
+BinPackArguments:  true
+BinPackParameters: true
+
+# Pointer and reference alignment
+PointerAlignment:   Left
+ReferenceAlignment: Left
+
+# Namespace
+NamespaceIndentation: None
+CompactNamespaces:    false
+
+# Includes: regroup into two blocks — project headers, then system headers.
+SortIncludes:  CaseSensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  # Project headers (quoted)
+  - Regex:    '^"'
+    Priority: 1
+  # System / library headers (angled)
+  - Regex:    '^<'
+    Priority: 2
+
+# Spaces
+SpaceBeforeParens:            ControlStatements
+SpacesInContainerLiterals:    false
+SpaceInEmptyBlock:            false
+SpaceBeforeCpp11BracedList:   false
+
+# Comments
+AlignTrailingComments:
+  Kind:           Always
+  OverEmptyLines: 0
+
+# Penalty tuning — prefer breaking before operators over long lines.
+PenaltyBreakBeforeFirstCallParameter: 100
+PenaltyReturnTypeOnItsOwnLine:        300
