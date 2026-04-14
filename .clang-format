@@ -58,9 +58,8 @@ SpaceInEmptyBlock:            false
 SpaceBeforeCpp11BracedList:   false
 
 # Comments
-AlignTrailingComments:
-  Kind:           Always
-  OverEmptyLines: 0
+# Use boolean form for compatibility with older clang-format in CI.
+AlignTrailingComments: true
 
 # Penalty tuning — prefer breaking before operators over long lines.
 PenaltyBreakBeforeFirstCallParameter: 100
