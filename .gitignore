@@ -41,3 +41,6 @@ Testing/
 fastapi/
 datasets/
 corpus/
+
+# Local Claude Code memory (developer notes; never commit)
+claude.md
