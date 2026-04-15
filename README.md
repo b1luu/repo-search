@@ -59,6 +59,32 @@ Or run the test binary directly for detailed output:
 
 ---
 
+## Benchmarking
+
+`scripts/bench_search.sh` runs `repo_search` multiple times against a corpus
+and reports min / median / p95 for the search hot path, plus medians for the
+parse / index / graph phases. Bash 3 compatible; no Python required.
+
+```bash
+# Default: 7 runs against the debug binary
+./scripts/bench_search.sh corpus/ucsd-classrooms "classroom schedule"
+
+# Override run count and/or binary path
+RUNS=25 ./scripts/bench_search.sh corpus/fastapi "dependency injection"
+BIN=./build/repo_search ./scripts/bench_search.sh corpus/fastapi "router"
+```
+
+Environment variables:
+
+| Var    | Default                       | Purpose                    |
+|--------|-------------------------------|----------------------------|
+| `RUNS` | `7`                           | Number of iterations       |
+| `BIN`  | `./build/debug/repo_search`   | Path to `repo_search` exe  |
+
+For stable numbers, benchmark a Release build and pin `RUNS>=15`.
+
+---
+
 ## Static Analysis
 
 clang-tidy configuration is in `.clang-tidy`.  Requires a debug build first
