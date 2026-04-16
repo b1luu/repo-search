@@ -46,3 +46,23 @@ jobs:
         run: |
           find src -name '*.cpp' -print0 \
             | xargs -0 clang-tidy-15 -p build
+
+      # Advisory: smoke-run the benchmark harness against the committed
+      # fixture corpus. Uploads a CSV for PR inspection. Only fails the job
+      # if the script itself crashes; drift in raw numbers is not a blocker.
+      - name: Benchmark (advisory)
+        continue-on-error: true
+        run: |
+          RUNS=7 WARMUP=2 BIN=./build/repo_search \
+            ./scripts/bench_search.sh \
+              --csv bench-results.csv \
+              tests/fixtures/bench_corpus \
+              "payment refund"
+
+      - name: Upload benchmark CSV
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: bench-results.csv
+          if-no-files-found: ignore

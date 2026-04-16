@@ -24,8 +24,9 @@ struct Graph {
 };
 
 // Build the import dependency graph from an already-built Index.
-// Resolution strategy: map each import name to a file whose stem matches.
-// __init__.py files are mapped to their parent directory name (package root).
+// Python resolution: dotted module-path matching against directory structure.
+// Relative imports (.foo, ..bar) are resolved from the importing file's package.
+// JS/TS resolution: relative path resolution with extension/index probing.
 Graph build_graph(const Index& idx);
 
 } // namespace rs

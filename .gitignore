@@ -37,6 +37,11 @@ Testing/
 # Logs
 *.log
 
+# Benchmark artifacts (the fixture corpus under tests/fixtures/ stays tracked)
+bench-results.csv
+bench-*.csv
+.cache/
+
 # Project-specific ignored directories
 fastapi/
 datasets/
