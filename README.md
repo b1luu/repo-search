@@ -2,196 +2,215 @@
 
 A low-latency, dependency-aware code search engine written in C++20.
 
-Indexes Python source files, builds an import dependency graph, and scores
-search results using both lexical similarity and graph structure.
+`repo_search` recursively indexes Python and JS/TS source files, builds a
+language-aware intra-repository dependency graph, and ranks results using both
+lexical similarity and graph structure.
 
----
+Current language support:
+- Python: `.py`, `.pyi`
+- JavaScript / TypeScript: `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`
+
+Python graph resolution preserves dotted module paths and resolves relative
+imports against the importing file's package path. JS/TS graph resolution
+handles relative specifiers with extension and `index.*` probing.
+
+## What It Does
+
+Pipeline:
+1. Parse supported source files under a directory
+2. Tokenize file contents for lexical indexing
+3. Extract import/module references
+4. Build an inverted index plus an intra-corpus dependency graph
+5. Score query results with TF-IDF and optional 1-hop graph expansion
+
+Search output is file-level. Results include direct lexical matches plus
+structurally related neighbors when graph expansion is enabled.
 
 ## Building
 
-**Release (default)**
+Release:
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
-./build/repo_search <directory> [query]
+./build/repo_search <directory> <query>
 ```
 
-**Debug (with ASan/UBSan)**
+Debug with ASan/UBSan:
 ```bash
 ./scripts/build_debug.sh
 # Binary: build/debug/repo_search
-# Tests:  build/debug/tests/rs_tests
 ```
 
----
-
-## Formatting
-
-The project enforces clang-format style defined in `.clang-format`.
+## CLI
 
 ```bash
-# Apply formatting to all source files
-./scripts/format.sh
-
-# Check without modifying (exits non-zero if any file is unformatted)
-./scripts/check_format.sh
+./build/repo_search [--top-k N] [--alpha F] <directory> <query>
 ```
 
-If `clang-format` is not in your `PATH`, set:
+Options:
+- `--top-k N`: number of results to return, default `10`
+- `--alpha F`: graph expansion weight in `[0,1]`, default `0.15`
+
+Example:
 ```bash
-export CLANG_FORMAT=/path/to/clang-format
+./build/repo_search --top-k 5 --alpha 0.2 tests/fixtures/bench_corpus "payment refund"
 ```
-
----
 
 ## Testing
 
-Tests are registered with CTest.  Run them via:
+The test suite is registered with CTest:
 
 ```bash
 ctest --test-dir build/debug --output-on-failure
 ```
 
-Or run the test binary directly for detailed output:
+Individual test executables are built under `build/debug/tests/`:
+- `rs_tests_parser`
+- `rs_tests_tokenizer`
+- `rs_tests_indexer`
+- `rs_tests_search`
+- `rs_tests_integration`
+- `rs_tests_relevance`
+
+For example:
 ```bash
-./build/debug/tests/rs_tests
+./build/debug/tests/rs_tests_relevance
 ```
 
----
-
-## Quality gates
-
-Before opening a PR, run the three hard gates locally:
-
-```bash
-./scripts/check_format.sh                          # formatting
-./scripts/build_debug.sh                           # debug build + ctest
-./build/debug/tests/rs_tests_relevance             # relevance regression
-```
-
-`ctest` runs the full suite (parser, tokenizer, indexer, search,
-integration, **relevance**) and is what CI enforces as a blocking gate.
-
-For a quick performance read on the committed fixture corpus:
-
-```bash
-RUNS=7 WARMUP=2 ./scripts/bench_search.sh \
-    --csv bench-results.csv \
-    tests/fixtures/bench_corpus \
-    "payment refund"
-# → bench-results.csv  (run,parse_ms,index_ms,graph_ms,search_us,query,corpus)
-```
-
-CI publishes `bench-results.csv` as a workflow artifact on every PR. The
-benchmark step is advisory — it only fails the job if the script crashes.
-
----
+Coverage areas:
+- Parser unit tests for Python and JS/TS import extraction
+- Tokenizer and indexer unit tests
+- Search behavior tests
+- Integration tests for graph construction and end-to-end ranking
+- Relevance regression tests on committed fixture corpora
 
 ## Benchmarking
 
-`scripts/bench_search.sh` runs `repo_search` multiple times against a corpus
-and reports min / median / p95 for the search hot path, plus medians for the
-parse / index / graph phases. Bash 3 compatible; no Python required.
+The repo includes a small committed benchmark fixture corpus under
+`tests/fixtures/bench_corpus`.
 
+Run the benchmark harness:
 ```bash
-# Default: 7 runs against the debug binary
-./scripts/bench_search.sh corpus/ucsd-classrooms "classroom schedule"
-
-# Override run count and/or binary path
-RUNS=25 ./scripts/bench_search.sh corpus/fastapi "dependency injection"
-BIN=./build/repo_search ./scripts/bench_search.sh corpus/fastapi "router"
+RUNS=7 WARMUP=2 ./scripts/bench_search.sh \
+  --csv bench-results.csv \
+  tests/fixtures/bench_corpus \
+  "payment refund"
 ```
 
-Environment variables:
+The harness reports:
+- per-run parse, index, graph, and search timings
+- min / median / p95 for search latency
+- median parse / index / graph timings
 
-| Var    | Default                       | Purpose                    |
-|--------|-------------------------------|----------------------------|
-| `RUNS` | `7`                           | Number of iterations       |
-| `BIN`  | `./build/debug/repo_search`   | Path to `repo_search` exe  |
+Useful overrides:
+- `RUNS`: number of measured runs, default `7`
+- `WARMUP`: warm-up runs excluded from reporting, default `1`
+- `BIN`: path to the binary, default `./build/debug/repo_search`
 
-For stable numbers, benchmark a Release build and pin `RUNS>=15`.
+For stable numbers, use a Release build and increase `RUNS`.
 
----
+## Formatting And Linting
 
-## Static Analysis
-
-clang-tidy configuration is in `.clang-tidy`.  Requires a debug build first
-(for `compile_commands.json`):
-
+Format all source files:
 ```bash
-./scripts/build_debug.sh   # also creates compile_commands.json symlink
-./scripts/lint.sh          # advisory — findings printed, non-blocking
+./scripts/format.sh
 ```
 
-To override `clang-tidy` version:
+Check formatting without modifying files:
 ```bash
-CLANG_TIDY=clang-tidy-15 ./scripts/lint.sh
+./scripts/check_format.sh
 ```
 
----
-
-## Pre-commit workflow
-
-Run these commands before every commit or PR:
-
+Run clang-tidy after a debug build:
 ```bash
-./scripts/format.sh         # 1. auto-format
-./scripts/check_format.sh   # 2. verify clean (must pass)
-./scripts/build_debug.sh    # 3. debug build + tests (must pass)
-./scripts/lint.sh           # 4. static analysis (advisory)
+./scripts/build_debug.sh
+./scripts/lint.sh
 ```
 
----
+If needed, override tool paths:
+```bash
+CLANG_FORMAT=/path/to/clang-format ./scripts/check_format.sh
+CLANG_TIDY=/path/to/clang-tidy ./scripts/lint.sh
+```
+
+## Recommended Local Checks
+
+Before opening a PR:
+```bash
+./scripts/check_format.sh
+./scripts/build_debug.sh
+./build/debug/tests/rs_tests_relevance
+./scripts/lint.sh
+```
+
+`check_format.sh` and the debug build plus CTest are hard CI gates. Lint and
+benchmarking are advisory.
 
 ## CI
 
-GitHub Actions runs on every push and pull request to `main`:
+GitHub Actions runs on pushes and pull requests to `main`.
 
-| Step | Failure behaviour |
-|---|---|
-| Format check | Hard failure — blocks merge |
-| Build (Debug) | Hard failure — blocks merge |
-| Tests (CTest) | Hard failure — blocks merge |
-| Lint (clang-tidy) | Advisory — shown but non-blocking |
+Current workflow behavior:
+- formatting check: blocking
+- debug build: blocking
+- CTest suite: blocking
+- clang-tidy: advisory
+- benchmark harness on committed fixture corpus: advisory
 
 Workflow definition: `.github/workflows/ci.yml`
 
----
+## Design Notes
 
-## LLM / GraphRAG direction
+Tokenizer:
+- lowercases ASCII in place
+- splits on non-alphanumeric boundaries
+- drops single-character tokens
 
-Current scope:
-- This project is a standalone C++ retrieval engine (parse -> index -> graph -> rank).
-- It does **not** currently use LangChain, GraphChain, or GraphRAG.
+Python dependency graph:
+- preserves absolute dotted imports such as `pkg.sub.mod`
+- preserves relative imports such as `.utils` and `..core`
+- resolves module paths from repository directory structure
+- treats `__init__.py` as the package module
 
-Possible future architecture:
-- Keep `repo_search` as the fast retrieval core.
-- Add a thin service layer (for example, Python) that calls `repo_search`.
-- Optionally integrate LangChain/GraphRAG in that outer layer for answer synthesis,
-  tool orchestration, and multi-step reasoning.
+JS/TS dependency graph:
+- extracts static `import`, `export ... from`, `require(...)`, and dynamic
+  `import("...")` specifiers
+- resolves only relative specifiers inside the indexed corpus
+- drops bare package imports from the graph
 
-This keeps the hot path low-latency while still allowing an LLM-powered UX on top.
+Known limitations:
+- no `sys.path`, `PYTHONPATH`, or virtualenv-aware Python resolution
+- no support for dynamic Python import mechanisms such as `importlib`
+- no `tsconfig` path aliases or `package.json` export resolution
+- graph edges are intentionally limited to files inside the indexed corpus
 
----
+## Project Structure
 
-## Project structure
-
-```
+```text
 src/
-  tokenizer.{h,cpp}   — ASCII tokenizer (no allocations in hot path)
-  parser.{h,cpp}      — file reader + Python import extractor
-  main.cpp            — CLI driver
+  main.cpp            CLI driver
+  tokenizer.{h,cpp}   lexical tokenization
+  parser.{h,cpp}      file parsing + import extraction
+  indexer.{h,cpp}     vocabulary, postings, and index construction
+  graph_builder.{h,cpp}
+                      dependency graph construction
+  search_engine.{h,cpp}
+                      ranking and graph-assisted retrieval
 
 tests/
-  test_tokenizer.cpp  — unit tests (hand-rolled runner, no framework)
+  test_parser.cpp
+  test_tokenizer.cpp
+  test_indexer.cpp
+  test_search.cpp
+  test_integration.cpp
+  test_relevance.cpp
+  fixtures/bench_corpus/
+                      committed mixed-language benchmark corpus
 
 scripts/
-  format.sh           — apply clang-format
-  check_format.sh     — verify formatting (used by CI)
-  lint.sh             — run clang-tidy
-  build_debug.sh      — debug build + tests + compile_commands.json symlink
-
-.clang-format         — formatting rules
-.clang-tidy           — static analysis rules
-.github/workflows/    — CI configuration
+  build_debug.sh
+  format.sh
+  check_format.sh
+  lint.sh
+  bench_search.sh
 ```
