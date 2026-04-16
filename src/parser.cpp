@@ -17,17 +17,17 @@ namespace rs {
 // Import extraction
 //
 // We handle two Python import forms without pulling in a full parser:
-//   import foo.bar
-//   from foo.bar import baz [as qux] [, ...]
+//   import foo.bar.baz        → "foo.bar.baz"  (full dotted path)
+//   from foo.bar import baz   → "foo.bar"      (full source module)
+//   from .utils import x      → ".utils"       (relative, single dot)
+//   from ..core import y      → "..core"       (relative, multi-dot)
+//   from . import z           → "."            (package-relative)
 //
-// We extract the top-level module name (everything before the first dot).
-// This is intentionally simple and fast — correctness matters more than
-// handling every edge case (dynamic imports, __import__, etc.).
+// The parser preserves full module paths and relative import syntax.
+// Resolution to file IDs happens in the graph builder, not here.
 // ---------------------------------------------------------------------------
 
 static void extract_imports(std::string_view content, std::vector<std::string>& out) {
-    // We scan line-by-line with a single pass — no regex overhead in the hot
-    // path.  Each line we test for the two import patterns manually.
     const char* p = content.data();
     const char* end = p + content.size();
 
@@ -38,7 +38,8 @@ static void extract_imports(std::string_view content, std::vector<std::string>& 
     };
 
     auto read_identifier = [](const char* s, const char* e, std::string& out_id) {
-        // Read a Python dotted identifier (foo.bar.baz) and return ptr past it.
+        // Read a Python dotted identifier (foo.bar.baz) or a relative import
+        // prefix (.foo, ..bar.baz) and return ptr past it.
         out_id.clear();
         while (s < e && (std::isalnum(static_cast<unsigned char>(*s)) || *s == '_' || *s == '.')) {
             out_id += *s++;
@@ -46,14 +47,7 @@ static void extract_imports(std::string_view content, std::vector<std::string>& 
         return s;
     };
 
-    auto top_level = [](const std::string& module) -> std::string {
-        // "foo.bar.baz" → "foo"
-        auto dot = module.find('.');
-        return (dot == std::string::npos) ? module : module.substr(0, dot);
-    };
-
     while (p < end) {
-        // Find end of line
         const char* line_end = p;
         while (line_end < end && *line_end != '\n')
             ++line_end;
@@ -65,13 +59,12 @@ static void extract_imports(std::string_view content, std::vector<std::string>& 
             lp[4] == 'r' && lp[5] == 't' && (lp[6] == ' ' || lp[6] == '\t')) {
 
             lp += 7;
-            // There can be multiple comma-separated modules
             while (lp < line_end) {
                 lp = skip_spaces(lp, line_end);
                 std::string mod;
                 lp = read_identifier(lp, line_end, mod);
                 if (!mod.empty()) {
-                    out.push_back(top_level(mod));
+                    out.push_back(mod);
                 }
                 // skip optional "as alias"
                 lp = skip_spaces(lp, line_end);
@@ -90,6 +83,7 @@ static void extract_imports(std::string_view content, std::vector<std::string>& 
 
         }
         // Match: from <module> import ...
+        // Includes relative imports: from .foo import x, from ..bar import y
         else if (line_end - lp >= 5 && lp[0] == 'f' && lp[1] == 'r' && lp[2] == 'o' &&
                  lp[3] == 'm' && (lp[4] == ' ' || lp[4] == '\t')) {
 
@@ -97,13 +91,12 @@ static void extract_imports(std::string_view content, std::vector<std::string>& 
             lp = skip_spaces(lp, line_end);
             std::string mod;
             lp = read_identifier(lp, line_end, mod);
-            if (!mod.empty() && mod[0] != '.') { // skip all relative imports (leading dot)
-                out.push_back(top_level(mod));
+            if (!mod.empty()) {
+                out.push_back(mod);
             }
-            // We don't need what's after "import" for the module name
         }
 
-        p = line_end + 1; // advance past '\n'
+        p = line_end + 1;
     }
 }
 

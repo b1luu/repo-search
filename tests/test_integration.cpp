@@ -169,6 +169,14 @@ static uint32_t find_fid(const rs::Index& idx, std::string_view suffix) {
     return ~uint32_t{0};
 }
 
+// Returns true iff graph.adj[from] contains `to`.
+static bool has_edge(const rs::Graph& g, uint32_t from, uint32_t to) {
+    if (from >= g.adj.size())
+        return false;
+    auto const& ns = g.adj[from];
+    return std::find(ns.begin(), ns.end(), to) != ns.end();
+}
+
 // ---------------------------------------------------------------------------
 // Naive O(N × D × Q) linear scan — simulates search without an inverted index.
 // Token data is snapshotted from ParsedFiles before build_index() consumes them.
@@ -361,6 +369,170 @@ static void test_auth_term_single_file_and_ranks_first(const TinyCorpus& c) {
 }
 
 // ---------------------------------------------------------------------------
+// ---- Python package corpus -------------------------------------------------
+//
+// Exercises full dotted module-path resolution and relative imports.
+//
+// Layout:
+//   app.py               import pkg.mod; from pkg.sub import func
+//   pkg/__init__.py       (empty)
+//   pkg/mod.py            from .sub import func
+//   pkg/sub.py            (no imports)
+//   lib/utils.py          (no imports)
+//   lib/core.py           from .utils import helper
+//   pkg/deep/__init__.py  from ..mod import thing
+//
+// Expected module map:
+//   app.py              → "app"
+//   pkg/__init__.py     → "pkg"
+//   pkg/mod.py          → "pkg.mod"
+//   pkg/sub.py          → "pkg.sub"
+//   lib/utils.py        → "lib.utils"
+//   lib/core.py         → "lib.core"
+//   pkg/deep/__init__.py → "pkg.deep"
+//
+// Expected edges (5 total):
+//   app        → pkg.mod       (via "pkg.mod")
+//   app        → pkg.sub       (via "pkg.sub")
+//   pkg.mod    → pkg.sub       (via ".sub" resolved from pkg.mod)
+//   lib.core   → lib.utils     (via ".utils" resolved from lib.core)
+//   pkg.deep   → pkg.mod       (via "..mod" resolved from pkg.deep __init__)
+// ---------------------------------------------------------------------------
+
+static constexpr const char* PY_APP = R"py(
+import pkg.mod
+from pkg.sub import func
+)py";
+
+static constexpr const char* PY_PKG_INIT = R"py(
+"""Package init."""
+)py";
+
+static constexpr const char* PY_PKG_MOD = R"py(
+from .sub import func
+
+def thing():
+    return func()
+)py";
+
+static constexpr const char* PY_PKG_SUB = R"py(
+def func():
+    return 42
+)py";
+
+static constexpr const char* PY_LIB_UTILS = R"py(
+def helper():
+    return "help"
+)py";
+
+static constexpr const char* PY_LIB_CORE = R"py(
+from .utils import helper
+
+def run():
+    return helper()
+)py";
+
+static constexpr const char* PY_PKG_DEEP_INIT = R"py(
+from ..mod import thing
+)py";
+
+struct PyPkgCorpus {
+    rs::Index idx;
+    rs::Graph graph;
+    fs::path dir;
+};
+
+static PyPkgCorpus make_py_pkg_corpus() {
+    auto dir = fs::temp_directory_path() / "rs_integration_py_pkg";
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    fs::create_directories(dir / "pkg");
+    fs::create_directories(dir / "pkg" / "deep");
+    fs::create_directories(dir / "lib");
+
+    write_file(dir / "app.py", PY_APP);
+    write_file(dir / "pkg" / "__init__.py", PY_PKG_INIT);
+    write_file(dir / "pkg" / "mod.py", PY_PKG_MOD);
+    write_file(dir / "pkg" / "sub.py", PY_PKG_SUB);
+    write_file(dir / "lib" / "utils.py", PY_LIB_UTILS);
+    write_file(dir / "lib" / "core.py", PY_LIB_CORE);
+    write_file(dir / "pkg" / "deep" / "__init__.py", PY_PKG_DEEP_INIT);
+
+    auto files = rs::parse_directory(dir);
+    auto idx = rs::build_index(std::move(files));
+    auto graph = rs::build_graph(idx);
+    return {std::move(idx), std::move(graph), dir};
+}
+
+// All 7 Python files must be parsed.
+static void test_py_pkg_all_files_parsed(const PyPkgCorpus& c) {
+    CHECK_EQ(c.idx.num_docs, 7u);
+}
+
+// Absolute dotted import: app.py → pkg/mod.py (via "pkg.mod")
+static void test_py_pkg_absolute_dotted_import(const PyPkgCorpus& c) {
+    const uint32_t app = find_fid(c.idx, "app.py");
+    const uint32_t mod = find_fid(c.idx, "pkg/mod.py");
+    CHECK(app != ~uint32_t{0});
+    CHECK(mod != ~uint32_t{0});
+    CHECK(has_edge(c.graph, app, mod));
+}
+
+// Absolute dotted from-import: app.py → pkg/sub.py (via "pkg.sub")
+static void test_py_pkg_absolute_from_import(const PyPkgCorpus& c) {
+    const uint32_t app = find_fid(c.idx, "app.py");
+    const uint32_t sub = find_fid(c.idx, "pkg/sub.py");
+    CHECK(app != ~uint32_t{0});
+    CHECK(sub != ~uint32_t{0});
+    CHECK(has_edge(c.graph, app, sub));
+}
+
+// Single-dot relative: pkg/mod.py → pkg/sub.py (via ".sub")
+static void test_py_pkg_single_dot_relative(const PyPkgCorpus& c) {
+    const uint32_t mod = find_fid(c.idx, "pkg/mod.py");
+    const uint32_t sub = find_fid(c.idx, "pkg/sub.py");
+    CHECK(mod != ~uint32_t{0});
+    CHECK(sub != ~uint32_t{0});
+    CHECK(has_edge(c.graph, mod, sub));
+}
+
+// Single-dot relative in different package: lib/core.py → lib/utils.py
+static void test_py_pkg_relative_cross_sibling(const PyPkgCorpus& c) {
+    const uint32_t core = find_fid(c.idx, "lib/core.py");
+    const uint32_t utils = find_fid(c.idx, "lib/utils.py");
+    CHECK(core != ~uint32_t{0});
+    CHECK(utils != ~uint32_t{0});
+    CHECK(has_edge(c.graph, core, utils));
+}
+
+// Double-dot relative from __init__.py: pkg/deep/__init__.py → pkg/mod.py
+static void test_py_pkg_double_dot_from_init(const PyPkgCorpus& c) {
+    const uint32_t deep = find_fid(c.idx, "pkg/deep/__init__.py");
+    const uint32_t mod = find_fid(c.idx, "pkg/mod.py");
+    CHECK(deep != ~uint32_t{0});
+    CHECK(mod != ~uint32_t{0});
+    CHECK(has_edge(c.graph, deep, mod));
+}
+
+// No collision: lib/utils.py and pkg/sub.py are distinct modules.
+// "pkg.sub" must NOT resolve to lib/utils.py.
+static void test_py_pkg_no_cross_package_collision(const PyPkgCorpus& c) {
+    const uint32_t app = find_fid(c.idx, "app.py");
+    const uint32_t lib_utils = find_fid(c.idx, "lib/utils.py");
+    CHECK(app != ~uint32_t{0});
+    CHECK(lib_utils != ~uint32_t{0});
+    CHECK(!has_edge(c.graph, app, lib_utils));
+}
+
+// Total edge count must be exactly 5.
+static void test_py_pkg_total_edges(const PyPkgCorpus& c) {
+    std::size_t total = 0;
+    for (auto const& nbrs : c.graph.adj)
+        total += nbrs.size();
+    CHECK_EQ(total, 5u);
+}
+
+// ---------------------------------------------------------------------------
 // ---- FastAPI corpus --------------------------------------------------------
 // ---------------------------------------------------------------------------
 
@@ -500,14 +672,6 @@ static TsCorpus make_ts_corpus() {
     auto idx = rs::build_index(std::move(files));
     auto graph = rs::build_graph(idx);
     return {std::move(idx), std::move(graph), dir};
-}
-
-// Returns true iff graph.adj[from] contains `to`.
-static bool has_edge(const rs::Graph& g, uint32_t from, uint32_t to) {
-    if (from >= g.adj.size())
-        return false;
-    auto const& ns = g.adj[from];
-    return std::find(ns.begin(), ns.end(), to) != ns.end();
 }
 
 // ---------------------------------------------------------------------------
@@ -727,6 +891,27 @@ int main() {
 
     fs::remove_all(ts_harden.dir);
 
+    // ---- Python package corpus ----------------------------------------------
+    std::printf("\n=== Python package corpus ===\n");
+    auto py_pkg = make_py_pkg_corpus();
+
+    std::size_t py_pkg_edges = 0;
+    for (auto const& adj : py_pkg.graph.adj)
+        py_pkg_edges += adj.size();
+    std::printf("  %u files, %u terms, %zu graph edges\n", py_pkg.idx.num_docs,
+                py_pkg.idx.vocab.size(), py_pkg_edges);
+
+    test_py_pkg_all_files_parsed(py_pkg);
+    test_py_pkg_absolute_dotted_import(py_pkg);
+    test_py_pkg_absolute_from_import(py_pkg);
+    test_py_pkg_single_dot_relative(py_pkg);
+    test_py_pkg_relative_cross_sibling(py_pkg);
+    test_py_pkg_double_dot_from_init(py_pkg);
+    test_py_pkg_no_cross_package_collision(py_pkg);
+    test_py_pkg_total_edges(py_pkg);
+
+    fs::remove_all(py_pkg.dir);
+
     // ---- FastAPI corpus -----------------------------------------------------
     std::printf("\n=== FastAPI corpus ===\n");
     const fs::path fastapi_path = find_fastapi();
@@ -754,7 +939,7 @@ int main() {
     if (g_skipped > 0)
         std::printf("Skipped: %d optional test(s).\n", g_skipped);
 
-    const int total_run = 6 + 4 + 4 + (fastapi_path.empty() ? 0 : 2);
+    const int total_run = 6 + 4 + 4 + 8 + (fastapi_path.empty() ? 0 : 2);
     if (g_failures == 0) {
         std::printf("All %d test(s) passed.\n", total_run);
         return 0;

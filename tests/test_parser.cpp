@@ -98,23 +98,53 @@ static void test_import_leading_tab() {
 // ---------------------------------------------------------------------------
 
 static void test_from_dotted_import() {
-    // Only the top-level module is recorded: "from x.y import z" → ["x"]
+    // Full dotted module path is preserved: "from x.y import z" → ["x.y"]
     auto imp = imports_from("from x.y import z\n");
     CHECK_EQ(imp.size(), 1u);
-    CHECK(imp[0] == "x");
+    CHECK(imp[0] == "x.y");
 }
 
-static void test_from_relative_single_dot_skipped() {
-    // "from . import local" — relative-only; no resolvable top-level module
+static void test_from_relative_single_dot() {
+    // "from . import local" — relative import, recorded as "."
     auto imp = imports_from("from . import local\n");
-    CHECK(imp.empty());
+    CHECK_EQ(imp.size(), 1u);
+    CHECK(imp[0] == ".");
 }
 
-static void test_from_relative_double_dot_skipped() {
-    // "from ..pkg import mod" — relative with dots; top_level("..pkg") would
-    // be substr(0,0) = "".  The parser must skip all leading-dot modules.
+static void test_from_relative_double_dot() {
+    // "from ..pkg import mod" → ["..pkg"]
     auto imp = imports_from("from ..pkg import mod\n");
-    CHECK(imp.empty());
+    CHECK_EQ(imp.size(), 1u);
+    CHECK(imp[0] == "..pkg");
+}
+
+static void test_from_relative_single_dot_name() {
+    // "from .utils import helper" → [".utils"]
+    auto imp = imports_from("from .utils import helper\n");
+    CHECK_EQ(imp.size(), 1u);
+    CHECK(imp[0] == ".utils");
+}
+
+static void test_from_relative_triple_dot() {
+    // "from ...deep.mod import x" → ["...deep.mod"]
+    auto imp = imports_from("from ...deep.mod import x\n");
+    CHECK_EQ(imp.size(), 1u);
+    CHECK(imp[0] == "...deep.mod");
+}
+
+static void test_import_dotted_preserves_full_path() {
+    // "import pkg.sub.mod" → ["pkg.sub.mod"]
+    auto imp = imports_from("import pkg.sub.mod\n");
+    CHECK_EQ(imp.size(), 1u);
+    CHECK(imp[0] == "pkg.sub.mod");
+}
+
+static void test_import_multi_dotted_with_alias() {
+    // "import foo.bar, baz.qux as q" → ["foo.bar", "baz.qux"]
+    auto imp = imports_from("import foo.bar, baz.qux as q\n");
+    CHECK_EQ(imp.size(), 2u);
+    CHECK(imp[0] == "foo.bar");
+    CHECK(imp[1] == "baz.qux");
 }
 
 // ---------------------------------------------------------------------------
@@ -497,8 +527,12 @@ int main() {
 
     // from … import form
     test_from_dotted_import();
-    test_from_relative_single_dot_skipped();
-    test_from_relative_double_dot_skipped();
+    test_from_relative_single_dot();
+    test_from_relative_double_dot();
+    test_from_relative_single_dot_name();
+    test_from_relative_triple_dot();
+    test_import_dotted_preserves_full_path();
+    test_import_multi_dotted_with_alias();
 
     // whitespace / comments
     test_inline_comment_ignored();
@@ -554,7 +588,7 @@ int main() {
 
     fs::remove_all(g_tmp_root);
 
-    const int total = 49;
+    const int total = 53;
     if (g_failures == 0) {
         std::printf("All %d tests passed.\n", total);
         return 0;

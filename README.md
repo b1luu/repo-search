@@ -59,6 +59,34 @@ Or run the test binary directly for detailed output:
 
 ---
 
+## Quality gates
+
+Before opening a PR, run the three hard gates locally:
+
+```bash
+./scripts/check_format.sh                          # formatting
+./scripts/build_debug.sh                           # debug build + ctest
+./build/debug/tests/rs_tests_relevance             # relevance regression
+```
+
+`ctest` runs the full suite (parser, tokenizer, indexer, search,
+integration, **relevance**) and is what CI enforces as a blocking gate.
+
+For a quick performance read on the committed fixture corpus:
+
+```bash
+RUNS=7 WARMUP=2 ./scripts/bench_search.sh \
+    --csv bench-results.csv \
+    tests/fixtures/bench_corpus \
+    "payment refund"
+# → bench-results.csv  (run,parse_ms,index_ms,graph_ms,search_us,query,corpus)
+```
+
+CI publishes `bench-results.csv` as a workflow artifact on every PR. The
+benchmark step is advisory — it only fails the job if the script crashes.
+
+---
+
 ## Benchmarking
 
 `scripts/bench_search.sh` runs `repo_search` multiple times against a corpus
