@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -12,12 +13,19 @@ enum class SourceLang {
     js_ts,
 };
 
+// Single source of truth for supported file extensions per language.
+// Any code that probes or classifies extensions must consult these tables.
+inline constexpr std::array<std::string_view, 2> kPythonExtensions = {".py", ".pyi"};
+inline constexpr std::array<std::string_view, 6> kJsTsExtensions = {".ts",  ".tsx", ".js",
+                                                                    ".jsx", ".mjs", ".cjs"};
+
 inline SourceLang classify_source_extension(std::string_view ext) {
-    if (ext == ".py" || ext == ".pyi")
-        return SourceLang::python;
-    if (ext == ".ts" || ext == ".tsx" || ext == ".js" || ext == ".jsx" || ext == ".mjs" ||
-        ext == ".cjs")
-        return SourceLang::js_ts;
+    for (auto e : kPythonExtensions)
+        if (ext == e)
+            return SourceLang::python;
+    for (auto e : kJsTsExtensions)
+        if (ext == e)
+            return SourceLang::js_ts;
     return SourceLang::unsupported;
 }
 

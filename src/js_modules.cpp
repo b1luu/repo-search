@@ -9,7 +9,35 @@ namespace rs {
 
 namespace fs = std::filesystem;
 
-static std::optional<uint32_t> resolve_js_relative_impl(
+namespace {
+
+// Probe `base` against the indexed JS/TS paths using the standard extension
+// precedence: `.ts` > `.tsx` > `.js` > `.jsx` > `.mjs` > `.cjs`.
+std::optional<uint32_t> lookup_with_extensions(
+    const fs::path& base, const std::unordered_map<std::string, uint32_t>& path_to_id) {
+    for (std::string_view ext : kJsTsExtensions) {
+        fs::path cand = base;
+        cand += ext;
+        const auto it = path_to_id.find(normalized_source_key(cand));
+        if (it != path_to_id.end())
+            return it->second;
+    }
+    return std::nullopt;
+}
+
+// Probe `<base>/index.<ext>` against the indexed JS/TS paths.
+std::optional<uint32_t> lookup_as_index_dir(
+    const fs::path& base, const std::unordered_map<std::string, uint32_t>& path_to_id) {
+    for (std::string_view ext : kJsTsExtensions) {
+        const fs::path cand = base / (std::string("index") + std::string(ext));
+        const auto it = path_to_id.find(normalized_source_key(cand));
+        if (it != path_to_id.end())
+            return it->second;
+    }
+    return std::nullopt;
+}
+
+std::optional<uint32_t> resolve_js_relative_impl(
     const fs::path& from_file, std::string_view module_str,
     const std::unordered_map<std::string, uint32_t>& path_to_id) {
     if (module_str.empty() || module_str[0] != '.')
@@ -17,27 +45,20 @@ static std::optional<uint32_t> resolve_js_relative_impl(
 
     const fs::path base = normalize_source_path(from_file.parent_path() / std::string(module_str));
 
-    for (std::string_view ext : {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}) {
-        fs::path cand = base;
-        cand += ext;
-        const auto it = path_to_id.find(normalized_source_key(cand));
-        if (it != path_to_id.end())
-            return it->second;
-    }
+    if (auto hit = lookup_with_extensions(base, path_to_id))
+        return hit;
+    if (auto hit = lookup_as_index_dir(base, path_to_id))
+        return hit;
 
-    for (std::string_view ext : {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}) {
-        const fs::path cand = base / (std::string("index") + std::string(ext));
-        const auto it = path_to_id.find(normalized_source_key(cand));
-        if (it != path_to_id.end())
-            return it->second;
-    }
-
+    // Fall back to the raw base path — the import may already carry an extension.
     const auto it = path_to_id.find(normalized_source_key(base));
     if (it != path_to_id.end())
         return it->second;
 
     return std::nullopt;
 }
+
+} // namespace
 
 JsModuleMap JsModuleMap::build(const Index& idx) {
     JsModuleMap map;
