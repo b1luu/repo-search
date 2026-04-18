@@ -58,6 +58,7 @@ add_library(rs_core OBJECT
     src/indexer.cpp
     src/python_modules.cpp
     src/js_modules.cpp
+    src/import_resolver.cpp
     src/graph_builder.cpp
     src/search_engine.cpp
 )
