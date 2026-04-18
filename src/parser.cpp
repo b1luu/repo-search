@@ -1,11 +1,10 @@
 #include "parser.h"
 
 #include "import_extractor.h"
+#include "source_discovery.h"
 #include "source_path.h"
 #include "tokenizer.h"
 
-#include <algorithm>
-#include <filesystem>
 #include <fstream>
 #include <optional>
 #include <unordered_set>
@@ -76,27 +75,7 @@ std::optional<ParsedFile> parse_file(const std::filesystem::path& path) {
 
 std::vector<ParsedFile> parse_directory(const std::filesystem::path& root) {
     std::vector<ParsedFile> results;
-    std::vector<std::filesystem::path> paths;
-
-    std::error_code ec;
-    for (auto const& entry : std::filesystem::recursive_directory_iterator(root, ec)) {
-        if (ec) {
-            ec.clear();
-            continue;
-        }
-        if (!entry.is_regular_file())
-            continue;
-        if (!is_supported_source_path(entry.path()))
-            continue;
-        paths.push_back(normalize_source_path(entry.path()));
-    }
-
-    // Filesystem traversal order is not stable across platforms or runs.
-    // Normalize the parse order so file_id assignment and downstream ranking
-    // remain deterministic.
-    std::sort(paths.begin(), paths.end(), [](const auto& a, const auto& b) {
-        return a.generic_string() < b.generic_string();
-    });
+    auto paths = discover_source_files(root);
 
     results.reserve(paths.size());
     for (auto const& path : paths) {
