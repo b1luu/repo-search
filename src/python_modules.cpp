@@ -1,5 +1,6 @@
 #include "python_modules.h"
 
+#include "ascii_utils.h"
 #include "source_path.h"
 
 #include <filesystem>
@@ -7,14 +8,6 @@
 namespace rs {
 
 namespace fs = std::filesystem;
-
-static std::string lowercase_copy(std::string s) {
-    for (char& c : s) {
-        if (c >= 'A' && c <= 'Z')
-            c = static_cast<char>(c + 32);
-    }
-    return s;
-}
 
 // Compute the longest common directory prefix across all indexed Python paths.
 static fs::path compute_corpus_root(const std::vector<std::string>& paths) {
@@ -115,7 +108,7 @@ PythonModuleMap PythonModuleMap::build(const Index& idx) {
         if (classify_source_path(path) != SourceLang::python)
             continue;
 
-        std::string module = lowercase_copy(file_to_python_module(path, corpus_root));
+        std::string module = ascii_lowercase_copy(file_to_python_module(path, corpus_root));
         if (!module.empty())
             map.module_to_id.try_emplace(module, fid);
         map.file_module[fid] = std::move(module);
@@ -132,10 +125,10 @@ std::optional<uint32_t> PythonModuleMap::resolve_import(uint32_t file_id,
 
     std::string resolved;
     if (import_str.front() == '.') {
-        resolved = lowercase_copy(
+        resolved = ascii_lowercase_copy(
             resolve_python_relative(import_str, file_module[file_id], file_is_init[file_id]));
     } else {
-        resolved = lowercase_copy(std::string(import_str));
+        resolved = ascii_lowercase_copy(import_str);
     }
 
     if (resolved.empty())

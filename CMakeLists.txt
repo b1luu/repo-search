@@ -53,6 +53,7 @@ target_compile_options(rs_warnings INTERFACE
 # OBJECT library: tokenizer + parser compiled once, linked into both the main
 # binary and the test executable — no double-compilation, no separate archive.
 add_library(rs_core OBJECT
+    src/ascii_utils.cpp
     src/tokenizer.cpp
     src/parser.cpp
     src/parsed_file_builder.cpp
