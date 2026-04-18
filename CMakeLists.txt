@@ -56,6 +56,7 @@ add_library(rs_core OBJECT
     src/tokenizer.cpp
     src/parser.cpp
     src/indexer.cpp
+    src/python_modules.cpp
     src/graph_builder.cpp
     src/search_engine.cpp
 )
