@@ -6,6 +6,20 @@
 
 namespace rs {
 
+static void add_edge(Graph& g, uint32_t from, uint32_t to) {
+    if (from == to)
+        return;
+    g.adj[from].push_back(to);
+    g.radj[to].push_back(from);
+}
+
+static void sort_and_dedupe_neighbors(std::vector<std::vector<uint32_t>>& adjacency) {
+    for (auto& neighbors : adjacency) {
+        std::sort(neighbors.begin(), neighbors.end());
+        neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
+    }
+}
+
 Graph build_graph(const Index& idx) {
     Graph g;
     g.num_nodes = idx.num_docs;
@@ -20,23 +34,13 @@ Graph build_graph(const Index& idx) {
 
             if (!target)
                 continue;
-            if (*target == fid)
-                continue;
-
-            g.adj[fid].push_back(*target);
-            g.radj[*target].push_back(fid);
+            add_edge(g, fid, *target);
         }
     }
 
-    // Deduplicate edges (a file can mention the same import more than once).
-    for (auto& neighbors : g.adj) {
-        std::sort(neighbors.begin(), neighbors.end());
-        neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
-    }
-    for (auto& neighbors : g.radj) {
-        std::sort(neighbors.begin(), neighbors.end());
-        neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
-    }
+    // Preserve the graph invariant that adjacency lists are sorted and unique.
+    sort_and_dedupe_neighbors(g.adj);
+    sort_and_dedupe_neighbors(g.radj);
 
     return g;
 }
