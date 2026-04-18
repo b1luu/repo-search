@@ -1,11 +1,11 @@
 #include "parser.h"
 
+#include "file_reader.h"
 #include "import_extractor.h"
 #include "source_discovery.h"
 #include "source_path.h"
 #include "tokenizer.h"
 
-#include <fstream>
 #include <optional>
 #include <unordered_set>
 #include <vector>
@@ -27,32 +27,6 @@ static void dedupe_preserve_order(std::vector<std::string>& v) {
     }
     v = std::move(out);
 }
-
-// ---------------------------------------------------------------------------
-// File reading
-// ---------------------------------------------------------------------------
-
-// Read entire file into a std::string.  Returns false on failure.
-static bool read_file(const std::filesystem::path& path, std::string& out) {
-    std::ifstream f(path, std::ios::binary);
-    if (!f)
-        return false;
-
-    f.seekg(0, std::ios::end);
-    const auto size = f.tellg();
-    if (size <= 0) {
-        out.clear();
-        return true; // empty file is valid
-    }
-    out.resize(static_cast<std::size_t>(size));
-    f.seekg(0);
-    f.read(out.data(), size);
-    return f.good() || f.eof();
-}
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
 
 std::optional<ParsedFile> parse_file(const std::filesystem::path& path) {
     ParsedFile pf;

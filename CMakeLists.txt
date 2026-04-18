@@ -55,6 +55,7 @@ target_compile_options(rs_warnings INTERFACE
 add_library(rs_core OBJECT
     src/tokenizer.cpp
     src/parser.cpp
+    src/file_reader.cpp
     src/source_discovery.cpp
     src/python_imports.cpp
     src/js_imports.cpp
