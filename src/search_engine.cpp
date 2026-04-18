@@ -8,6 +8,14 @@
 
 namespace rs {
 
+static bool higher_rank(const SearchResult& a, const SearchResult& b) {
+    if (a.score != b.score)
+        return a.score > b.score;
+    if (a.path != b.path)
+        return a.path < b.path;
+    return a.file_id < b.file_id;
+}
+
 std::vector<SearchResult> search(std::string_view query, const Index& idx, const Graph& graph,
                                  const SearchParams& params) {
     if (idx.num_docs == 0 || params.top_k == 0)
@@ -119,10 +127,7 @@ std::vector<SearchResult> search(std::string_view query, const Index& idx, const
 
     // partial_sort: O(n log k) — more efficient than full sort when k << n.
     const auto k = static_cast<std::ptrdiff_t>(std::min<std::size_t>(params.top_k, results.size()));
-    std::partial_sort(results.begin(), results.begin() + k, results.end(),
-                      [](SearchResult const& a, SearchResult const& b) {
-                          return a.score > b.score;
-                      });
+    std::partial_sort(results.begin(), results.begin() + k, results.end(), higher_rank);
     results.resize(static_cast<std::size_t>(k));
 
     return results;

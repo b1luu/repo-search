@@ -512,6 +512,26 @@ static void test_parse_directory_recursive() {
     CHECK(has_name("keep.js"));
 }
 
+static void test_parse_directory_returns_stable_sorted_paths() {
+    auto dir = g_tmp_root / "stable_order";
+    write_file(dir / "z_last.py", "import os\n");
+    write_file(dir / "a_first.py", "import sys\n");
+    write_file(dir / "mid" / "m_middle.ts", "export const x = 1;\n");
+
+    auto files = rs::parse_directory(dir);
+    CHECK_EQ(files.size(), 3u);
+
+    std::vector<std::string> rels;
+    rels.reserve(files.size());
+    for (auto const& f : files) {
+        rels.push_back(fs::path(f.path).lexically_relative(dir).generic_string());
+    }
+
+    CHECK(rels[0] == "a_first.py");
+    CHECK(rels[1] == "mid/m_middle.ts");
+    CHECK(rels[2] == "z_last.py");
+}
+
 // ---------------------------------------------------------------------------
 
 int main() {
@@ -585,10 +605,11 @@ int main() {
     // parse_directory
     test_parse_directory_filters_extensions();
     test_parse_directory_recursive();
+    test_parse_directory_returns_stable_sorted_paths();
 
     fs::remove_all(g_tmp_root);
 
-    const int total = 53;
+    const int total = 54;
     if (g_failures == 0) {
         std::printf("All %d tests passed.\n", total);
         return 0;

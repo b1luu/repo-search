@@ -188,6 +188,25 @@ static void test_result_scores_positive() {
     }
 }
 
+static void test_tied_scores_break_by_path() {
+    std::vector<rs::ParsedFile> files;
+    files.reserve(2);
+    files.push_back(make_pf("z.py", "alpha beta gamma delta epsilon", {}));
+    files.push_back(make_pf("a.py", "alpha beta gamma delta epsilon", {}));
+
+    auto idx = rs::build_index(std::move(files));
+    rs::Graph graph;
+    graph.num_nodes = idx.num_docs;
+    graph.adj.resize(idx.num_docs);
+    graph.radj.resize(idx.num_docs);
+
+    auto results = rs::search("alpha", idx, graph, {.top_k = 2, .graph_alpha = 0.0f});
+
+    CHECK_EQ(results.size(), 2u);
+    CHECK(results[0].path == "a.py");
+    CHECK(results[1].path == "z.py");
+}
+
 // ---------------------------------------------------------------------------
 
 int main() {
@@ -201,8 +220,9 @@ int main() {
     test_top_k_limits_results();
     test_multi_term_query();
     test_result_scores_positive();
+    test_tied_scores_break_by_path();
 
-    const int total = 10;
+    const int total = 11;
     if (g_failures == 0) {
         std::printf("All %d tests passed.\n", total);
         return 0;

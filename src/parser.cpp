@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <algorithm>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -377,6 +378,7 @@ std::optional<ParsedFile> parse_file(const std::filesystem::path& path) {
 
 std::vector<ParsedFile> parse_directory(const std::filesystem::path& root) {
     std::vector<ParsedFile> results;
+    std::vector<std::filesystem::path> paths;
 
     std::error_code ec;
     for (auto const& entry : std::filesystem::recursive_directory_iterator(root, ec)) {
@@ -389,8 +391,19 @@ std::vector<ParsedFile> parse_directory(const std::filesystem::path& root) {
         const std::string ext = entry.path().extension().string();
         if (!is_supported_source_extension(ext))
             continue;
+        paths.push_back(entry.path().lexically_normal());
+    }
 
-        auto pf = parse_file(entry.path());
+    // Filesystem traversal order is not stable across platforms or runs.
+    // Normalize the parse order so file_id assignment and downstream ranking
+    // remain deterministic.
+    std::sort(paths.begin(), paths.end(), [](const auto& a, const auto& b) {
+        return a.generic_string() < b.generic_string();
+    });
+
+    results.reserve(paths.size());
+    for (auto const& path : paths) {
+        auto pf = parse_file(path);
         if (pf)
             results.push_back(std::move(*pf));
     }
