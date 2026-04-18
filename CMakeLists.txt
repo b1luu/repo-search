@@ -68,6 +68,7 @@ add_library(rs_core OBJECT
     src/import_resolver.cpp
     src/graph_builder.cpp
     src/search_engine.cpp
+    src/cli.cpp
 )
 target_include_directories(rs_core PUBLIC src)
 target_link_libraries(rs_core PUBLIC rs_warnings)
