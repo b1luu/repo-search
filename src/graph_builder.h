@@ -21,6 +21,9 @@ struct Graph {
     std::vector<std::vector<uint32_t>> adj;
     std::vector<std::vector<uint32_t>> radj;
     uint32_t num_nodes{0};
+
+    void add_edge(uint32_t from, uint32_t to);
+    void finalize();
 };
 
 // Build the import dependency graph from an already-built Index.

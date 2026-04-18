@@ -6,18 +6,23 @@
 
 namespace rs {
 
-static void add_edge(Graph& g, uint32_t from, uint32_t to) {
-    if (from == to)
-        return;
-    g.adj[from].push_back(to);
-    g.radj[to].push_back(from);
-}
-
 static void sort_and_dedupe_neighbors(std::vector<std::vector<uint32_t>>& adjacency) {
     for (auto& neighbors : adjacency) {
         std::sort(neighbors.begin(), neighbors.end());
         neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
     }
+}
+
+void Graph::add_edge(uint32_t from, uint32_t to) {
+    if (from == to)
+        return;
+    adj[from].push_back(to);
+    radj[to].push_back(from);
+}
+
+void Graph::finalize() {
+    sort_and_dedupe_neighbors(adj);
+    sort_and_dedupe_neighbors(radj);
 }
 
 Graph build_graph(const Index& idx) {
@@ -34,13 +39,12 @@ Graph build_graph(const Index& idx) {
 
             if (!target)
                 continue;
-            add_edge(g, fid, *target);
+            g.add_edge(fid, *target);
         }
     }
 
     // Preserve the graph invariant that adjacency lists are sorted and unique.
-    sort_and_dedupe_neighbors(g.adj);
-    sort_and_dedupe_neighbors(g.radj);
+    g.finalize();
 
     return g;
 }
