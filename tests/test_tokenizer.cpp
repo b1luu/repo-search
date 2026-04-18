@@ -1,36 +1,10 @@
 #include "tokenizer.h"
 
+#include "test_check.h"
+
 #include <cstdio>
 #include <string>
 #include <vector>
-
-// ---------------------------------------------------------------------------
-// Minimal hand-rolled test runner.
-//
-// Design: no external framework, no new dependencies.  A CHECK failure prints
-// the file/line/expression and increments a global counter; main() returns
-// non-zero if any checks failed so CTest registers the job as failed.
-// ---------------------------------------------------------------------------
-
-static int g_failures = 0;
-
-// NOLINTBEGIN(cppcoreguidelines-macro-usage)
-#define CHECK(expr)                                                                                \
-    do {                                                                                           \
-        if (!(expr)) {                                                                             \
-            std::fprintf(stderr, "FAIL  %s:%d  %s\n", __FILE__, __LINE__, #expr);                  \
-            ++g_failures;                                                                          \
-        }                                                                                          \
-    } while (0)
-
-#define CHECK_EQ(a, b)                                                                             \
-    do {                                                                                           \
-        if ((a) != (b)) {                                                                          \
-            std::fprintf(stderr, "FAIL  %s:%d  (%s) == (%s)\n", __FILE__, __LINE__, #a, #b);       \
-            ++g_failures;                                                                          \
-        }                                                                                          \
-    } while (0)
-// NOLINTEND(cppcoreguidelines-macro-usage)
 
 // ---------------------------------------------------------------------------
 // tokenize() tests

@@ -4,6 +4,8 @@
 #include "search_engine.h"
 #include "tokenizer.h"
 
+#include "test_check.h"
+
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -15,26 +17,7 @@
 
 namespace fs = std::filesystem;
 
-static int g_failures = 0;
 static int g_skipped = 0;
-
-// NOLINTBEGIN(cppcoreguidelines-macro-usage)
-#define CHECK(expr)                                                                                \
-    do {                                                                                           \
-        if (!(expr)) {                                                                             \
-            std::fprintf(stderr, "FAIL  %s:%d  %s\n", __FILE__, __LINE__, #expr);                  \
-            ++g_failures;                                                                          \
-        }                                                                                          \
-    } while (0)
-
-#define CHECK_EQ(a, b)                                                                             \
-    do {                                                                                           \
-        if ((a) != (b)) {                                                                          \
-            std::fprintf(stderr, "FAIL  %s:%d  (%s) == (%s)\n", __FILE__, __LINE__, #a, #b);       \
-            ++g_failures;                                                                          \
-        }                                                                                          \
-    } while (0)
-// NOLINTEND(cppcoreguidelines-macro-usage)
 
 // ---------------------------------------------------------------------------
 // Tiny corpus content

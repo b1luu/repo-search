@@ -18,6 +18,8 @@
 #include "parser.h"
 #include "search_engine.h"
 
+#include "test_check.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -29,26 +31,7 @@
 
 namespace fs = std::filesystem;
 
-static int g_failures = 0;
 static int g_cases = 0;
-
-// NOLINTBEGIN(cppcoreguidelines-macro-usage)
-#define CHECK(expr)                                                                                \
-    do {                                                                                           \
-        if (!(expr)) {                                                                             \
-            std::fprintf(stderr, "FAIL  %s:%d  %s\n", __FILE__, __LINE__, #expr);                  \
-            ++g_failures;                                                                          \
-        }                                                                                          \
-    } while (0)
-
-#define CHECK_MSG(expr, fmt, ...)                                                                  \
-    do {                                                                                           \
-        if (!(expr)) {                                                                             \
-            std::fprintf(stderr, "FAIL  %s:%d  " fmt "\n", __FILE__, __LINE__, __VA_ARGS__);       \
-            ++g_failures;                                                                          \
-        }                                                                                          \
-    } while (0)
-// NOLINTEND(cppcoreguidelines-macro-usage)
 
 // ---------------------------------------------------------------------------
 // Python fixture
