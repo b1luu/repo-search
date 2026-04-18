@@ -1,5 +1,6 @@
 #include "parser.h"
 
+#include "source_path.h"
 #include "tokenizer.h"
 
 #include <cstddef>
@@ -336,19 +337,6 @@ static bool read_file(const std::filesystem::path& path, std::string& out) {
     return f.good() || f.eof();
 }
 
-static bool is_python_extension(std::string_view ext) {
-    return ext == ".py" || ext == ".pyi";
-}
-
-static bool is_js_like_extension(std::string_view ext) {
-    return ext == ".ts" || ext == ".tsx" || ext == ".js" || ext == ".jsx" || ext == ".mjs" ||
-           ext == ".cjs";
-}
-
-static bool is_supported_source_extension(std::string_view ext) {
-    return is_python_extension(ext) || is_js_like_extension(ext);
-}
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -362,10 +350,10 @@ std::optional<ParsedFile> parse_file(const std::filesystem::path& path) {
 
     // Extract imports BEFORE tokenizing: the tokenizer lowercases content
     // in place, which would corrupt case-sensitive JS/TS module specifiers.
-    const std::string ext = path.extension().string();
-    if (is_python_extension(ext)) {
+    const SourceLang lang = classify_source_path(path);
+    if (lang == SourceLang::python) {
         extract_imports(pf.content, pf.imports);
-    } else if (is_js_like_extension(ext)) {
+    } else if (lang == SourceLang::js_ts) {
         extract_js_imports(pf.content, pf.imports);
     }
     dedupe_preserve_order(pf.imports);
@@ -388,10 +376,9 @@ std::vector<ParsedFile> parse_directory(const std::filesystem::path& root) {
         }
         if (!entry.is_regular_file())
             continue;
-        const std::string ext = entry.path().extension().string();
-        if (!is_supported_source_extension(ext))
+        if (!is_supported_source_path(entry.path()))
             continue;
-        paths.push_back(entry.path().lexically_normal());
+        paths.push_back(normalize_source_path(entry.path()));
     }
 
     // Filesystem traversal order is not stable across platforms or runs.

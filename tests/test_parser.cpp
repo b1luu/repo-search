@@ -475,12 +475,14 @@ static void test_parse_directory_filters_extensions() {
     // Supported source files should be returned; unsupported extensions skipped.
     auto dir = g_tmp_root / "ext_filter";
     write_file(dir / "module.py", "x = 1\n");
+    write_file(dir / "types.pyi", "def f() -> int: ...\n");
     write_file(dir / "module.ts", "export const x = 1;\n");
+    write_file(dir / "side_effect.mjs", "import \"./module.js\";\n");
     write_file(dir / "notes.txt", "some text\n");
     write_file(dir / "helper.cpp", "int main(){}\n");
 
     auto files = rs::parse_directory(dir);
-    CHECK_EQ(files.size(), 2u);
+    CHECK_EQ(files.size(), 4u);
 
     auto has_name = [&](const std::string& name) {
         return std::any_of(files.begin(), files.end(), [&](const rs::ParsedFile& f) {
@@ -488,7 +490,9 @@ static void test_parse_directory_filters_extensions() {
         });
     };
     CHECK(has_name("module.py"));
+    CHECK(has_name("types.pyi"));
     CHECK(has_name("module.ts"));
+    CHECK(has_name("side_effect.mjs"));
 }
 
 static void test_parse_directory_recursive() {

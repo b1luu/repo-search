@@ -1,5 +1,7 @@
 #include "graph_builder.h"
 
+#include "source_path.h"
+
 #include <algorithm>
 #include <filesystem>
 #include <optional>
@@ -18,15 +20,6 @@ static std::string lowercase_copy(std::string s) {
             c = static_cast<char>(c + 32);
     }
     return s;
-}
-
-static bool is_python_ext(std::string_view ext) {
-    return ext == ".py" || ext == ".pyi";
-}
-
-static bool is_jsts_ext(std::string_view ext) {
-    return ext == ".ts" || ext == ".tsx" || ext == ".js" || ext == ".jsx" || ext == ".mjs" ||
-           ext == ".cjs";
 }
 
 // ---------------------------------------------------------------------------
@@ -158,29 +151,27 @@ static std::optional<uint32_t> resolve_js_relative(
     if (module_str.empty() || module_str[0] != '.')
         return std::nullopt;
 
-    const fs::path base = (from_file.parent_path() / std::string(module_str)).lexically_normal();
-
-    static constexpr const char* kExts[] = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"};
+    const fs::path base = normalize_source_path(from_file.parent_path() / std::string(module_str));
 
     // 1. base + extension
-    for (const char* ext : kExts) {
+    for (std::string_view ext : {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}) {
         fs::path cand = base;
         cand += ext;
-        const auto it = path_to_id.find(cand.generic_string());
+        const auto it = path_to_id.find(normalized_source_key(cand));
         if (it != path_to_id.end())
             return it->second;
     }
 
     // 2. base/index.<ext>  (directory-as-module convention)
-    for (const char* ext : kExts) {
-        const fs::path cand = base / (std::string("index") + ext);
-        const auto it = path_to_id.find(cand.generic_string());
+    for (std::string_view ext : {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}) {
+        const fs::path cand = base / (std::string("index") + std::string(ext));
+        const auto it = path_to_id.find(normalized_source_key(cand));
         if (it != path_to_id.end())
             return it->second;
     }
 
     // 3. base exactly as written (user supplied the extension)
-    const auto it = path_to_id.find(base.generic_string());
+    const auto it = path_to_id.find(normalized_source_key(base));
     if (it != path_to_id.end())
         return it->second;
 
@@ -214,17 +205,17 @@ Graph build_graph(const Index& idx) {
 
     for (uint32_t fid = 0; fid < idx.num_docs; ++fid) {
         const fs::path p(idx.paths[fid]);
-        const std::string ext = p.extension().string();
+        const SourceLang lang = classify_source_path(p);
 
-        if (is_python_ext(ext)) {
+        if (lang == SourceLang::python) {
             std::string mod = lowercase_copy(file_to_python_module(p, corpus_root));
             if (!mod.empty()) {
                 python_module_to_id.try_emplace(mod, fid);
             }
             python_file_module[fid] = std::move(mod);
             python_is_init[fid] = (p.stem().string() == "__init__");
-        } else if (is_jsts_ext(ext)) {
-            js_path_to_id[p.lexically_normal().generic_string()] = fid;
+        } else if (lang == SourceLang::js_ts) {
+            js_path_to_id[normalized_source_key(p)] = fid;
         }
     }
 
@@ -237,9 +228,9 @@ Graph build_graph(const Index& idx) {
     // -----------------------------------------------------------------------
     for (uint32_t fid = 0; fid < idx.num_docs; ++fid) {
         const fs::path p(idx.paths[fid]);
-        const std::string ext = p.extension().string();
-        const bool python = is_python_ext(ext);
-        const bool jsts = is_jsts_ext(ext);
+        const SourceLang lang = classify_source_path(p);
+        const bool python = lang == SourceLang::python;
+        const bool jsts = lang == SourceLang::js_ts;
 
         for (std::string const& imp : idx.file_imports[fid]) {
             std::optional<uint32_t> target;
