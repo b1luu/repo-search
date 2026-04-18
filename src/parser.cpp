@@ -1,5 +1,6 @@
 #include "parser.h"
 
+#include "collection_utils.h"
 #include "file_reader.h"
 #include "import_extractor.h"
 #include "source_discovery.h"
@@ -7,26 +8,9 @@
 #include "tokenizer.h"
 
 #include <optional>
-#include <unordered_set>
 #include <vector>
 
 namespace rs {
-
-// Deduplicate `v` in place, preserving the first-occurrence order.
-static void dedupe_preserve_order(std::vector<std::string>& v) {
-    if (v.size() < 2)
-        return;
-    std::unordered_set<std::string> seen;
-    std::vector<std::string> out;
-    seen.reserve(v.size());
-    out.reserve(v.size());
-    for (auto& s : v) {
-        if (seen.insert(s).second) {
-            out.push_back(std::move(s));
-        }
-    }
-    v = std::move(out);
-}
 
 std::optional<ParsedFile> parse_file(const std::filesystem::path& path) {
     ParsedFile pf;
